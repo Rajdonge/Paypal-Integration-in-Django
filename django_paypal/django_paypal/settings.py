@@ -128,3 +128,5 @@ STATICFILES_DIRS = [
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
+
+PAYPAL_CLIENT_ID = "AWd5rA9Z9R368CkP9x0dQfh1obCy5ERmyV_0rs6jYly18fbPDyIKPTq7y31YgicnxN0cITHn_U7zaN9m"
