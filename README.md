@@ -3,7 +3,8 @@ While following the steps of the article, I faced some missing information and s
 
 Further, this `README` is meant to help you guide through his described steps and set up the same code as shown in this repo.
 
-# [![Watch the demo to create sandbox accounts (personal & business)]](https://github.com/Rajdonge/Paypal-Integration-in-Django/blob/main/Paypal%20Integration%20in%20Django.mp4)
+[![Watch the demo to create sandbox accounts (personal & business)]](https://github.com/Rajdonge/Paypal-Integration-in-Django/raw/main/Paypal%20Integration%20in%20Django.mp4)
+
 
 
 # Step 1
