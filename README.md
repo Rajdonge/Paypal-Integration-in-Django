@@ -1,10 +1,10 @@
 # Django Paypal Payment Gateway Integration
-
-This repo is meant as an extension to this article [Django Paypal Payment Gateway Integration with Working Example](https://studygyaan.com/django/django-paypal-payment-gateway-integration-tutorial) by Adam Smith.
-
 While following the steps of the article, I faced some missing information and steps, so I decided to reproduced this tutorial as a minimal Django application that you can use as an working example and compare your own code to.
 
 Further, this `README` is meant to help you guide through his described steps and set up the same code as shown in this repo.
+
+# [![Watch the demo to create sandbox accounts (personal & business)]](https://github.com/Rajdonge/Paypal-Integration-in-Django/blob/main/Paypal%20Integration%20in%20Django.mp4)
+
 
 # Step 1
 - install virtual environment:
