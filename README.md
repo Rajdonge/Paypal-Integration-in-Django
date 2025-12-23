@@ -47,115 +47,121 @@ INSTALLED_APPS = [
 ]
 ```
 
-- install `paypalrestsdk` Python package to interact with the PayPal API
-
-`pip install paypalrestsdk`
 
 # Step 2: Set up Paypal Sandbox
-- go to to https://developer.paypal.com/dashboard/applications/sandbox
-- click on `create app` and create a new app for your Django application
-- open your Paypal-Sandbox app and look for your Client Id and Secret
+- go to to https://developer.paypal.com
+- click on `Sandbox accounts`, click on Create account
+- open your Paypal-Sandbox app and look for your Client Id and Secret: (create personal account for customer account and business account for merchant account)
+- click on business account and create a app, and get the client id.
 - in `settings.py` add the following two lines to the bottom:
 ```
 PAYPAL_CLIENT_ID = 'your_paypal_client_id'
-PAYPAL_SECRET = 'your_paypal_secret'
 ```
-(Replace each string with the actual Client Id and Secret from your Paypal Sandbox)
+(Replace each string with the actual Client Id from your Paypal Sandbox)
 
 *Note: These should not be shared, e.g. on GitHub. Thus, you can create a new file called `credentials.py` in your project and place bothe lines there.*
 
 Then, import both variables to your `views.py`:
-`from django_paypal.credentials import PAYPAL_SECRET, PAYPAL_CLIENT_ID`
+`from django_paypal.credentials import PAYPAL_CLIENT_ID`
 
 Finally, updated the configuration part to:
 ```
-paypalrestsdk.configure({
-    "mode": "sandbox", 
-    "client_id": PAYPAL_CLIENT_ID, # Updated
-    "client_secret": PAYPAL_SECRET, # Updated
-})
+def checkout(request):
+    return render(request, "checkout.html", {
+        "paypal_client_id": PAYPAL_CLIENT_ID
+    })
 ```
 
 # Step 3: Create Views
 Create three views:
-- create_payment
-- execute_payment
-- payment_checkout
+- checkout
+- payment_success
 - payment_failed
 
 ```
 # views.py
 
-import paypalrestsdk
 from django.conf import settings
-from django.shortcuts import render, redirect
-from django.urls import reverse
+from django.shortcuts import render
+from django.views.decorators.csrf import csrf_exempt
+import json
 
-paypalrestsdk.configure({
-    "mode": "sandbox",  # Change to "live" for production
-    "client_id": settings.PAYPAL_CLIENT_ID,
-    "client_secret": settings.PAYPAL_SECRET,
-})
-
-def create_payment(request):
-    payment = paypalrestsdk.Payment({
-        "intent": "sale",
-        "payer": {
-            "payment_method": "paypal",
-        },
-        "redirect_urls": {
-            "return_url": request.build_absolute_uri(reverse('execute_payment')),
-            "cancel_url": request.build_absolute_uri(reverse('payment_failed')),
-        },
-        "transactions": [
-            {
-                "amount": {
-                    "total": "10.00",  # Total amount in USD
-                    "currency": "USD",
-                },
-                "description": "Payment for Product/Service",
-            }
-        ],
+def checkout(request):
+    return render(request, "checkout.html", {
+        "paypal_client_id": settings.PAYPAL_CLIENT_ID
     })
 
-    if payment.create():
-        return redirect(payment.links[1].href)  # Redirect to PayPal for payment
+@csrf_exempt
+def payment_success(request):
+    if request.method == "POST":
+        data = json.loads(request.body)
+        order_id = data.get("id")
+        print("Payment successful. Order ID:", order_id)
+        return render(request, "payment_success.html")
     else:
-        return render(request, 'payment_failed.html')
-
-def execute_payment(request):
-    payment_id = request.GET.get('paymentId')
-    payer_id = request.GET.get('PayerID')
-
-    payment = paypalrestsdk.Payment.find(payment_id)
-
-    if payment.execute({"payer_id": payer_id}):
-        return render(request, 'payment_success.html')
-    else:
-        return render(request, 'payment_failed.html')
-
-def payment_checkout(request):
-    return render(request, 'checkout.html')
+        return render(request, "payment_success.html")
 
 def payment_failed(request):
-    return render(request, 'payment_failed.html')
+    return render(request, "payment_failed.html")
 ```
 
 # Step 4: Create Templates and URL’s
 - in your app folder create a folder named 'templates'
 
-## Create payment_success.html
+## Create checkout.html
 ```
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Payment Successful</title>
+    <title>PayPal Checkout</title>
+
+    <!-- OFFICIAL PAYPAL SDK -->
+    <script src="https://www.paypal.com/sdk/js?client-id={{ paypal_client_id }}&currency=USD&intent=capture"></script>
 </head>
 <body>
-    <h1>Payment Successful</h1>
-    <p>Thank you for your purchase!</p>
+
+<h2>Pay with PayPal</h2>
+
+<div id="paypal-button-container"></div>
+
+<script>
+paypal.Buttons({
+    createOrder: function (data, actions) {
+        return actions.order.create({
+            purchase_units: [{
+                amount: {
+                    value: "10.00"
+                }
+            }]
+        });
+    },
+
+    onApprove: function (data, actions) {
+        return actions.order.capture().then(function (details) {
+            fetch("{% url 'payment_success' %}", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "X-CSRFToken": "{{ csrf_token }}"
+                },
+                body: JSON.stringify(details)
+            }).then(() => {
+                window.location.href = "{% url 'payment_success' %}";
+            });
+        });
+    },
+
+    onCancel: function () {
+        window.location.href = "{% url 'payment_failed' %}";
+    },
+
+    onError: function (err) {
+        console.error("PayPal error:", err);
+        alert("Payment error – check console");
+    }
+}).render("#paypal-button-container");
+</script>
+
 </body>
 </html>
 ```
@@ -163,25 +169,32 @@ def payment_failed(request):
 ## Create payment_failed.html
 ```
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Payment Failed</title>
 </head>
 <body>
-    <h1>Payment Failed</h1>
-    <p>Your payment was not completed. Please try again.</p>
+<h1>Payment Failed</h1>
+<p>Something went wrong. Please try again.</p>
+<a href="{% url 'checkout' %}">Back to Checkout</a>
 </body>
 </html>
 ```
 
-## Create a button intitate Paypal payment
+## Create success.html
 ```
-<form action="{% url 'create_payment' %}" method="POST">
-    {% csrf_token %}
-    <button type="submit">Pay with PayPal</button>
-</form>
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Payment Successful</title>
+</head>
+<body>
+<h1>Payment Successful</h1>
+<p>Order ID: {{ order_id }}</p>
+<p>Thank you for your purchase!</p>
+<a href="{% url 'checkout' %}">Back to Checkout</a>
+</body>
+</html>
 ``` 
 
 ## Add URL patterns for your views
@@ -194,10 +207,9 @@ Include the new urls:
 ```
 urlpatterns = [
     ...
-    path('checkout/', views.payment_checkout, name='checkout_payment'),
-    path('create_payment/', views.create_payment, name='create_payment'),
-    path('execute_payment/', views.execute_payment, name='execute_payment'),
-    path('payment_failed', views.payment_failed, name='payment_failed')
+    path("checkout/", views.checkout, name="checkout"),
+    path("success/", views.payment_success, name="payment_success"),
+    path("failed/", views.payment_failed, name="payment_failed"),
 ]
 ```
 
@@ -215,15 +227,13 @@ Navigate to:
 
 The checkout page will look like this:
 
-![checkout-page](./checkout-page.jpg)
+![checkout-page](./pay-with-paypal.png)
 
-When clicking on `Pay with Paypal`, we are asked to login into Paypal.
+When clicking on `Paypal`, we are asked to login into Paypal.
 
 *Note: Check the url. You will see that we are asked to log into the Sandbox-Paypal account.*
 
-Go to https://developer.paypal.com/dashboard/accounts and click on the account with `...@personal.example.com`
-
-Use the email and password to log into the Sandbox account.
+Login with the personal account that we previously created.
 
 Confirm the payment. You should be redirected to your `payment_success.html` page.
 
@@ -236,86 +246,3 @@ Log in using the business Sandbox account.
 (Go to https://developer.paypal.com/dashboard/accounts and click on the account with `...@business.example.com`)
 
 Check if the payment occurs in your recent activity.
-
-# Step 7: Button styling (optional)
-You can update the styling of the PayPal button.
-
-The styling is based on this [code](https://codepen.io/Kofaka/pen/OPbqNo) and was adjusted to only use regular css.
-
-\
-Create a folder named `static` in your project folder.
-
-Create a folder named `css` within this folder.
-
-Create a new file named `main.css` within this folder.
-
-Copy the css code to the file:
-```
-/* .paypal-logo */
-        .paypal-logo {
-            font-family: Verdana, Tahoma;
-            font-weight: bold;
-            font-size: 26px;
-        }
-
-        .paypal-logo i:first-child {
-            color: #253b80;
-        }
-
-        .paypal-logo i:last-child {
-            color: #179bd7;
-        }
-
-        /* .paypal-button */
-        .paypal-button {
-            padding: 15px 30px;
-            border: 1px solid #FF9933;
-            border-radius: 5px;
-            background-image: linear-gradient(#FFF0A8, #F9B421);
-            display: block;
-            min-width: 138px;
-            position: relative;
-        }
-
-        .paypal-button-title {
-            font-size: 14px;
-            color: #505050;
-            vertical-align: baseline;
-            text-shadow: 0px 1px 0px rgba(255, 255, 255, 0.6);
-        }
-
-        .paypal-button .paypal-logo {
-            display: inline-block;
-            text-shadow: 0px 1px 0px rgba(255, 255, 255, 0.6);
-            font-size: 20px;
-        }
-```
-
-Import the `os` module in your `settings.py`:
-
-`import os`
-
-Add a variable that stores the directory:
-
-`
-STATICFILES_DIRS = [
-    os.path.join(BASE_DIR, 'django_paypal/static')
-]
-`
-Update `checkout.html`:
-
-```
-<!DOCTYPE html>
-{% load static %}
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Checkout</title>
-    <link rel="stylesheet" type="text/css" href="{% static 'css/main.css' %}">
-</head>
-```
-
-Your button should look like this now:
-
-![Paypal Button](./paypal-button.jpg)
